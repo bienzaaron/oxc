@@ -1,3 +1,5 @@
+use std::fmt::Write;
+
 use oxc_ast::{
     AstKind,
     ast::{AssignmentTargetProperty, Expression, PropertyKey},
@@ -12,17 +14,10 @@ use serde_json::Value;
 
 use crate::{AstNode, context::LintContext, rule::Rule};
 
-fn no_restricted_properties_diagnostic(
-    object_name_option: Option<&CompactStr>,
-    property_name_option: Option<&CompactStr>,
-    message_option: Option<&CompactStr>,
-    allow_objects: Option<&[CompactStr]>,
-    allow_properties: Option<&[CompactStr]>,
-    span: Span,
-) -> OxcDiagnostic {
-    let mut warn_text = match message_option {
+fn no_restricted_properties_diagnostic(property: &PropertyDetails, span: Span) -> OxcDiagnostic {
+    let mut warn_text = match &property.message {
         Some(message) => message.as_str().to_string(),
-        _ => match (object_name_option, property_name_option) {
+        _ => match (&property.object, &property.property) {
             (Some(object_name), Some(property_name)) => {
                 format!("'{object_name}.{property_name}' is restricted from being used.")
             }
@@ -36,21 +31,44 @@ fn no_restricted_properties_diagnostic(
         },
     };
 
-    if let (Some(property_name), Some(allow_objects)) = (property_name_option, allow_objects) {
-        warn_text.push_str(&format!(
+    if let (Some(property_name), Some(allow_objects)) =
+        (&property.property, &property.allow_objects)
+    {
+        write!(
+            warn_text,
             " Property '{property_name}' is only allowed on these objects: {}.",
             allow_objects.iter().map(CompactStr::as_str).collect::<Vec<_>>().join(", ")
-        ));
+        )
+        .unwrap();
     }
 
-    if let Some(allow_properties) = allow_properties {
-        warn_text.push_str(&format!(
+    if let Some(allow_properties) = &property.allow_properties {
+        write!(
+            warn_text,
             " Only these properties are allowed: {}.",
             allow_properties.iter().map(CompactStr::as_str).collect::<Vec<_>>().join(", ")
-        ));
+        )
+        .unwrap();
     }
 
     OxcDiagnostic::warn(warn_text).with_label(span)
+}
+
+fn identifier_name<'a>(expression: &'a Expression<'a>) -> Option<&'a str> {
+    match expression {
+        Expression::Identifier(identifier) => Some(identifier.name.as_str()),
+        _ => None,
+    }
+}
+
+fn property_key_name_and_span<'a>(key: &'a PropertyKey<'a>) -> Option<(&'a str, Span)> {
+    match key {
+        PropertyKey::Identifier(ident) => Some((ident.name.as_str(), ident.span)),
+        PropertyKey::StaticIdentifier(ident) => Some((ident.name.as_str(), ident.span)),
+        PropertyKey::PrivateIdentifier(ident) => Some((ident.name.as_str(), ident.span)),
+        PropertyKey::StringLiteral(ident) => Some((ident.value.as_str(), ident.span)),
+        _ => None,
+    }
 }
 
 #[derive(Debug, Default, Clone, Deserialize, JsonSchema)]
@@ -226,79 +244,50 @@ impl Rule for NoRestrictedProperties {
                 let parent_node = ctx.nodes().parent_node(target.node_id());
 
                 let object_name = match parent_node.kind() {
-                    AstKind::AssignmentExpression(expression) => match &expression.right {
-                        Expression::Identifier(identifier) => Some(identifier.name.as_str()),
-                        _ => None,
-                    },
+                    AstKind::AssignmentExpression(expression) => identifier_name(&expression.right),
                     _ => None,
                 };
-                let properties = target.properties.iter().flat_map(|p| match p {
-                    AssignmentTargetProperty::AssignmentTargetPropertyIdentifier(ident) => {
-                        Some((ident.binding.name.as_str(), ident.binding.span))
-                    }
-                    AssignmentTargetProperty::AssignmentTargetPropertyProperty(prop) => match &prop
-                        .name
-                    {
-                        PropertyKey::Identifier(ident) => Some((ident.name.as_str(), ident.span)),
-                        PropertyKey::StaticIdentifier(ident) => {
-                            Some((ident.name.as_str(), ident.span))
+                let properties = target.properties.iter().filter_map(|p| {
+                    let (property_name, span) = match p {
+                        AssignmentTargetProperty::AssignmentTargetPropertyIdentifier(ident) => {
+                            (ident.binding.name.as_str(), ident.binding.span)
                         }
-                        PropertyKey::PrivateIdentifier(ident) => {
-                            Some((ident.name.as_str(), ident.span))
+                        AssignmentTargetProperty::AssignmentTargetPropertyProperty(prop) => {
+                            property_key_name_and_span(&prop.name)?
                         }
-                        PropertyKey::StringLiteral(ident) => {
-                            Some((ident.value.as_str(), ident.span))
-                        }
-                        _ => None,
-                    },
+                    };
+
+                    Some((property_name, span))
                 });
 
-                for property in properties {
-                    self.check_property_access(object_name, Some(property.0), property.1, ctx);
+                for (property_name, span) in properties {
+                    self.check_property_access(object_name, Some(property_name), span, ctx);
                 }
             }
             AstKind::ObjectPattern(pattern) => {
                 let parent_node = ctx.nodes().parent_node(pattern.node_id());
 
                 let object_name = match parent_node.kind() {
-                    AstKind::VariableDeclarator(declarator) => match &declarator.init {
-                        Some(value) => match value {
-                            Expression::Identifier(identifier) => Some(identifier.name.as_str()),
-                            _ => None,
-                        },
-                        _ => None,
-                    },
-                    AstKind::AssignmentExpression(expression) => match &expression.right {
-                        Expression::Identifier(identifier) => Some(identifier.name.as_str()),
-                        _ => None,
-                    },
-                    AstKind::AssignmentPattern(assignment_pattern) => {
-                        match &assignment_pattern.right {
-                            Expression::Identifier(identifier) => Some(identifier.name.as_str()),
-                            _ => None,
-                        }
+                    AstKind::VariableDeclarator(declarator) => {
+                        declarator.init.as_ref().and_then(identifier_name)
                     }
-                    AstKind::FormalParameter(parameter) => match &parameter.initializer {
-                        Some(value) => match value.as_ref() {
-                            Expression::Identifier(identifier) => Some(identifier.name.as_str()),
-                            _ => None,
-                        },
-                        _ => None,
-                    },
+                    AstKind::AssignmentExpression(expression) => identifier_name(&expression.right),
+                    AstKind::AssignmentPattern(assignment_pattern) => {
+                        identifier_name(&assignment_pattern.right)
+                    }
+                    AstKind::FormalParameter(parameter) => {
+                        parameter.initializer.as_deref().and_then(identifier_name)
+                    }
                     _ => None,
                 };
-                let properties = pattern.properties.iter().flat_map(|p| match &p.key {
-                    PropertyKey::Identifier(ident) => Some((ident.name.as_str(), ident.span)),
-                    PropertyKey::StaticIdentifier(ident) => Some((ident.name.as_str(), ident.span)),
-                    PropertyKey::PrivateIdentifier(ident) => {
-                        Some((ident.name.as_str(), ident.span))
-                    }
-                    PropertyKey::StringLiteral(ident) => Some((ident.value.as_str(), ident.span)),
-                    _ => None,
+                let properties = pattern.properties.iter().filter_map(|p| {
+                    let (property_name, span) = property_key_name_and_span(&p.key)?;
+
+                    Some((property_name, span))
                 });
 
-                for property in properties {
-                    self.check_property_access(object_name, Some(property.0), property.1, ctx);
+                for (property_name, span) in properties {
+                    self.check_property_access(object_name, Some(property_name), span, ctx);
                 }
             }
             _ => (),
@@ -315,25 +304,20 @@ impl NoRestrictedProperties {
         ctx: &LintContext<'a>,
     ) {
         for property in self.restricted_properties.iter() {
-            if property.object.as_deref().is_none_or(|name| object_name == Some(name))
-                && property.property.as_deref().is_none_or(|name| Some(name) == property_name)
-                && !property.allow_objects.as_deref().is_some_and(|allow| {
-                    object_name.is_some_and(|obj_name| {
-                        allow.iter().any(|check| check.as_str() == obj_name)
-                    })
-                })
-                && !property.allow_properties.as_deref().is_some_and(|allow| {
-                    allow.iter().any(|check| Some(check.as_str()) == property_name)
-                })
-            {
-                ctx.diagnostic(no_restricted_properties_diagnostic(
-                    property.object.as_ref(),
-                    property.property.as_ref(),
-                    property.message.as_ref(),
-                    property.allow_objects.as_deref(),
-                    property.allow_properties.as_deref(),
-                    span,
-                ));
+            let object_matches =
+                property.object.as_deref().is_none_or(|name| object_name == Some(name));
+            let property_matches =
+                property.property.as_deref().is_none_or(|name| Some(name) == property_name);
+            let object_allowed = property.allow_objects.as_deref().is_some_and(|allow| {
+                object_name
+                    .is_some_and(|obj_name| allow.iter().any(|check| check.as_str() == obj_name))
+            });
+            let property_allowed = property.allow_properties.as_deref().is_some_and(|allow| {
+                allow.iter().any(|check| Some(check.as_str()) == property_name)
+            });
+
+            if object_matches && property_matches && !object_allowed && !property_allowed {
+                ctx.diagnostic(no_restricted_properties_diagnostic(property, span));
             }
         }
     }
