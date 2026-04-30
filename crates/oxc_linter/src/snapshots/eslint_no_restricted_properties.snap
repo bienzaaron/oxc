@@ -80,6 +80,36 @@ source: crates/oxc_linter/src/tester.rs
    · ─────────────────
    ╰────
 
+  ⚠ eslint(no-restricted-properties): '0' is restricted from being used.
+   ╭─[no_restricted_properties.tsx:1:1]
+ 1 │ obj[0]
+   · ──────
+   ╰────
+
+  ⚠ eslint(no-restricted-properties): '1' is restricted from being used.
+   ╭─[no_restricted_properties.tsx:1:1]
+ 1 │ obj[1n]
+   · ───────
+   ╰────
+
+  ⚠ eslint(no-restricted-properties): 'true' is restricted from being used.
+   ╭─[no_restricted_properties.tsx:1:1]
+ 1 │ obj[true]
+   · ─────────
+   ╰────
+
+  ⚠ eslint(no-restricted-properties): 'null' is restricted from being used.
+   ╭─[no_restricted_properties.tsx:1:1]
+ 1 │ obj[null]
+   · ─────────
+   ╰────
+
+  ⚠ eslint(no-restricted-properties): 'foo' is restricted from being used.
+   ╭─[no_restricted_properties.tsx:1:1]
+ 1 │ obj[`foo`]
+   · ──────────
+   ╰────
+
   ⚠ eslint(no-restricted-properties): Please call require() directly.
    ╭─[no_restricted_properties.tsx:1:1]
  1 │ require.call({}, 'foo')
@@ -162,6 +192,24 @@ source: crates/oxc_linter/src/tester.rs
    ╭─[no_restricted_properties.tsx:1:7]
  1 │ var {['foo']: qux, bar} = baz
    ·       ─────
+   ╰────
+
+  ⚠ eslint(no-restricted-properties): 'obj.100' is restricted from being used.
+   ╭─[no_restricted_properties.tsx:1:10]
+ 1 │ const { [100]: x } = obj;
+   ·          ───
+   ╰────
+
+  ⚠ eslint(no-restricted-properties): 'obj.foo' is restricted from being used.
+   ╭─[no_restricted_properties.tsx:1:10]
+ 1 │ const { [`foo`]: x } = obj;
+   ·          ─────
+   ╰────
+
+  ⚠ eslint(no-restricted-properties): 'obj.100' is restricted from being used.
+   ╭─[no_restricted_properties.tsx:1:5]
+ 1 │ ({ [100]: x } = obj);
+   ·     ───
    ╰────
 
   ⚠ eslint(no-restricted-properties): '#foo' is restricted from being used.

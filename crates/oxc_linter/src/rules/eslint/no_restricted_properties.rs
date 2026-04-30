@@ -1,18 +1,18 @@
 use std::fmt::Write;
 
 use oxc_ast::{
-    AstKind,
     ast::{AssignmentTargetProperty, Expression, PropertyKey},
+    AstKind,
 };
 use oxc_diagnostics::OxcDiagnostic;
 use oxc_macros::declare_oxc_lint;
 use oxc_span::Span;
 use oxc_str::CompactStr;
 use schemars::JsonSchema;
-use serde::{Deserialize, de};
+use serde::{de, Deserialize};
 use serde_json::Value;
 
-use crate::{AstNode, context::LintContext, rule::Rule};
+use crate::{context::LintContext, rule::Rule, AstNode};
 
 fn no_restricted_properties_diagnostic(property: &PropertyDetails, span: Span) -> OxcDiagnostic {
     let mut warn_text = match &property.message {
@@ -61,12 +61,35 @@ fn identifier_name<'a>(expression: &'a Expression<'a>) -> Option<&'a str> {
     }
 }
 
-fn property_key_name_and_span<'a>(key: &'a PropertyKey<'a>) -> Option<(&'a str, Span)> {
+fn expression_property_name(expression: &Expression<'_>) -> Option<String> {
+    match expression {
+        Expression::StringLiteral(literal) => Some(literal.value.to_string()),
+        Expression::RegExpLiteral(literal) => literal.raw.map(|r| r.to_string()),
+        Expression::NumericLiteral(literal) => Some(literal.value.to_string()),
+        Expression::BigIntLiteral(literal) => Some(literal.value.to_string()),
+        Expression::BooleanLiteral(literal) => Some(literal.value.to_string()),
+        Expression::NullLiteral(_) => Some("null".to_string()),
+        Expression::TemplateLiteral(literal) if literal.quasis.len() == 1 => {
+            literal.quasis[0].value.cooked.map(|cooked| cooked.to_string())
+        }
+        _ => None,
+    }
+}
+
+fn property_key_name_and_span(key: &PropertyKey<'_>) -> Option<(String, Span)> {
     match key {
-        PropertyKey::Identifier(ident) => Some((ident.name.as_str(), ident.span)),
-        PropertyKey::StaticIdentifier(ident) => Some((ident.name.as_str(), ident.span)),
-        PropertyKey::PrivateIdentifier(ident) => Some((ident.name.as_str(), ident.span)),
-        PropertyKey::StringLiteral(ident) => Some((ident.value.as_str(), ident.span)),
+        PropertyKey::Identifier(ident) => Some((ident.name.to_string(), ident.span)),
+        PropertyKey::StaticIdentifier(ident) => Some((ident.name.to_string(), ident.span)),
+        PropertyKey::PrivateIdentifier(ident) => Some((ident.name.to_string(), ident.span)),
+        PropertyKey::StringLiteral(literal) => Some((literal.value.to_string(), literal.span)),
+        PropertyKey::RegExpLiteral(literal) => literal.raw.map(|r| (r.to_string(), literal.span)),
+        PropertyKey::NumericLiteral(literal) => Some((literal.value.to_string(), literal.span)),
+        PropertyKey::BigIntLiteral(literal) => Some((literal.value.to_string(), literal.span)),
+        PropertyKey::BooleanLiteral(literal) => Some((literal.value.to_string(), literal.span)),
+        PropertyKey::NullLiteral(literal) => Some(("null".to_string(), literal.span)),
+        PropertyKey::TemplateLiteral(literal) if literal.quasis.len() == 1 => {
+            literal.quasis[0].value.cooked.map(|cooked| (cooked.to_string(), literal.span))
+        }
         _ => None,
     }
 }
@@ -279,12 +302,13 @@ impl Rule for NoRestrictedProperties {
                     Some(ident) => Some(ident.name.as_str()),
                     _ => None,
                 };
-                let property_name = match &expression.expression {
-                    Expression::StringLiteral(literal) => Some(literal.value.as_str()),
-                    Expression::RegExpLiteral(literal) => literal.raw.map(|r| r.as_str()),
-                    _ => None,
-                };
-                self.check_property_access(object_name, property_name, expression.span, ctx);
+                let property_name = expression_property_name(&expression.expression);
+                self.check_property_access(
+                    object_name,
+                    property_name.as_deref(),
+                    expression.span,
+                    ctx,
+                );
             }
             AstKind::ObjectAssignmentTarget(target) => {
                 let parent_node = ctx.nodes().parent_node(target.node_id());
@@ -296,7 +320,7 @@ impl Rule for NoRestrictedProperties {
                 let properties = target.properties.iter().filter_map(|p| {
                     let (property_name, span) = match p {
                         AssignmentTargetProperty::AssignmentTargetPropertyIdentifier(ident) => {
-                            (ident.binding.name.as_str(), ident.binding.span)
+                            (ident.binding.name.to_string(), ident.binding.span)
                         }
                         AssignmentTargetProperty::AssignmentTargetPropertyProperty(prop) => {
                             property_key_name_and_span(&prop.name)?
@@ -307,7 +331,12 @@ impl Rule for NoRestrictedProperties {
                 });
 
                 for (property_name, span) in properties {
-                    self.check_property_access(object_name, Some(property_name), span, ctx);
+                    self.check_property_access(
+                        object_name,
+                        Some(property_name.as_ref()),
+                        span,
+                        ctx,
+                    );
                 }
             }
             AstKind::ObjectPattern(pattern) => {
@@ -333,7 +362,12 @@ impl Rule for NoRestrictedProperties {
                 });
 
                 for (property_name, span) in properties {
-                    self.check_property_access(object_name, Some(property_name), span, ctx);
+                    self.check_property_access(
+                        object_name,
+                        Some(property_name.as_ref()),
+                        span,
+                        ctx,
+                    );
                 }
             }
             _ => (),
@@ -580,6 +614,11 @@ fn test() {
         ("foo.bar();", Some(serde_json::json!([{ "property": "bar" }]))),
         ("foo.bar.baz();", Some(serde_json::json!([{ "property": "bar" }]))),
         ("foo[/(?<zero>0)/]", Some(serde_json::json!([{ "property": "/(?<zero>0)/" }]))), // { "ecmaVersion": 2018 },
+        ("obj[0]", Some(serde_json::json!([{ "property": "0" }]))),
+        ("obj[1n]", Some(serde_json::json!([{ "property": "1" }]))),
+        ("obj[true]", Some(serde_json::json!([{ "property": "true" }]))),
+        ("obj[null]", Some(serde_json::json!([{ "property": "null" }]))),
+        ("obj[`foo`]", Some(serde_json::json!([{ "property": "foo" }]))),
         (
             "require.call({}, 'foo')",
             Some(
@@ -622,6 +661,18 @@ fn test() {
         (
             "var {['foo']: qux, bar} = baz",
             Some(serde_json::json!([{ "object": "baz", "property": "foo" }])),
+        ), // { "ecmaVersion": 6 },
+        (
+            "const { [100]: x } = obj;",
+            Some(serde_json::json!([{ "object": "obj", "property": "100" }])),
+        ), // { "ecmaVersion": 6 },
+        (
+            "const { [`foo`]: x } = obj;",
+            Some(serde_json::json!([{ "object": "obj", "property": "foo" }])),
+        ), // { "ecmaVersion": 6 },
+        (
+            "({ [100]: x } = obj);",
+            Some(serde_json::json!([{ "object": "obj", "property": "100" }])),
         ), // { "ecmaVersion": 6 },
         ("obj['#foo']", Some(serde_json::json!([{ "property": "#foo" }]))),
         ("const { bar: { bad } = {} } = foo;", Some(serde_json::json!([{ "property": "bad" }]))), // { "ecmaVersion": 6 },
@@ -681,16 +732,12 @@ fn test() {
 #[test]
 fn invalid_configs_error_in_from_configuration() {
     assert!(NoRestrictedProperties::from_configuration(serde_json::json!([{}])).is_err());
-    assert!(
-        NoRestrictedProperties::from_configuration(
-            serde_json::json!([{ "object": "foo", "allowObjects": ["bar"] }])
-        )
-        .is_err()
-    );
-    assert!(
-        NoRestrictedProperties::from_configuration(
-            serde_json::json!([{ "property": "foo", "allowProperties": ["bar"] }])
-        )
-        .is_err()
-    );
+    assert!(NoRestrictedProperties::from_configuration(
+        serde_json::json!([{ "object": "foo", "allowObjects": ["bar"] }])
+    )
+    .is_err());
+    assert!(NoRestrictedProperties::from_configuration(
+        serde_json::json!([{ "property": "foo", "allowProperties": ["bar"] }])
+    )
+    .is_err());
 }
