@@ -119,7 +119,7 @@ declare_oxc_lint!(
     ///
     /// ### Examples
     ///
-    /// If we have options:
+    /// **With options:**
     ///
     /// ```json
     /// "no-restricted-properties": ["error", {
@@ -140,6 +140,52 @@ declare_oxc_lint!(
     /// /* no-restricted-properties: ["error", { "object": "JSON", "property": "parse" }] */
     ///
     /// JSON.stringify({ json: "here" })
+    /// ```
+    ///
+    /// **With options:**
+    ///
+    /// ```json
+    /// "no-restricted-properties": ["error", {
+    ///   "property": "extend",
+    ///   "allowObjects": ["safeUtils"]
+    /// }]
+    /// ```
+    ///
+    /// Examples of **incorrect** code for this rule:
+    /// ```js
+    /// /* no-restricted-properties: ["error", { "property": "extend", "allowObjects": ["safeUtils"] }] */
+    ///
+    /// unsafeUtils.extend(value) // 'extend' is restricted from being used. Property 'extend' is only allowed on these objects: safeUtils.
+    /// ```
+    ///
+    /// Examples of **correct** code for this rule:
+    /// ```js
+    /// /* no-restricted-properties: ["error", { "property": "extend", "allowObjects": ["safeUtils"] }] */
+    ///
+    /// safeUtils.extend(value)
+    /// ```
+    ///
+    /// **With options:**
+    ///
+    /// ```json
+    /// "no-restricted-properties": ["error", {
+    ///   "object": "legacyApi",
+    ///   "allowProperties": ["stableMethod"]
+    /// }]
+    /// ```
+    ///
+    /// Examples of **incorrect** code for this rule:
+    /// ```js
+    /// /* no-restricted-properties: ["error", { "object": "legacyApi", "allowProperties": ["stableMethod"] }] */
+    ///
+    /// legacyApi.unstableMethod() // 'legacyApi' is restricted from being used. Only these properties are allowed: stableMethod.
+    /// ```
+    ///
+    /// Examples of **correct** code for this rule:
+    /// ```js
+    /// /* no-restricted-properties: ["error", { "object": "legacyApi", "allowProperties": ["stableMethod"] }] */
+    ///
+    /// legacyApi.stableMethod()
     /// ```
     ///
     /// ### Options
