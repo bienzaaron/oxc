@@ -121,6 +121,9 @@ struct PropertyDetails {
     allow_properties: Option<Vec<CompactStr>>,
 }
 
+#[derive(Debug, Default, Clone, JsonSchema, Deserialize)]
+struct PropertyDetailsList(Vec<PropertyDetails>);
+
 impl PropertyDetails {
     fn validate(&self) -> Result<(), serde_json::Error> {
         if self.object.is_none() && self.property.is_none() {
@@ -142,7 +145,7 @@ impl PropertyDetails {
 #[derive(Debug, Default, Clone, JsonSchema, Deserialize)]
 #[serde(rename_all = "camelCase", default, deny_unknown_fields)]
 pub struct NoRestrictedProperties {
-    restricted_properties: Box<Vec<PropertyDetails>>,
+    restricted_properties: Box<PropertyDetailsList>,
 }
 
 declare_oxc_lint!(
@@ -301,24 +304,20 @@ impl Rule for NoRestrictedProperties {
             }
             _ => {}
         }
-        Ok(Self { restricted_properties: Box::new(properties) })
+        Ok(Self { restricted_properties: Box::new(PropertyDetailsList(properties)) })
     }
 
     fn run<'a>(&self, node: &AstNode<'a>, ctx: &LintContext<'a>) {
         match node.kind() {
             AstKind::StaticMemberExpression(expression) => {
-                let object_name = match expression.object.get_identifier_reference() {
-                    Some(ident) => Some(ident.name.as_str()),
-                    _ => None,
-                };
+                let object_name =
+                    expression.object.get_identifier_reference().map(|ident| ident.name.as_str());
                 let property_name = expression.property.name.as_str();
                 self.check_property_access(object_name, Some(property_name), expression.span, ctx);
             }
             AstKind::ComputedMemberExpression(expression) => {
-                let object_name = match expression.object.get_identifier_reference() {
-                    Some(ident) => Some(ident.name.as_str()),
-                    _ => None,
-                };
+                let object_name =
+                    expression.object.get_identifier_reference().map(|ident| ident.name.as_str());
                 let property_name = expression_property_name(&expression.expression);
                 self.check_property_access(
                     object_name,
@@ -388,19 +387,19 @@ impl Rule for NoRestrictedProperties {
                 }
             }
             _ => (),
-        };
+        }
     }
 }
 
 impl NoRestrictedProperties {
-    fn check_property_access<'a>(
+    fn check_property_access(
         &self,
         object_name: Option<&str>,
         property_name: Option<&str>,
         span: Span,
-        ctx: &LintContext<'a>,
+        ctx: &LintContext<'_>,
     ) {
-        for property in self.restricted_properties.iter() {
+        for property in &self.restricted_properties.0 {
             let object_matches =
                 property.object.as_deref().is_none_or(|name| object_name == Some(name));
             let property_matches =
