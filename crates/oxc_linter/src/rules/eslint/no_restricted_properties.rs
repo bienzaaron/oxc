@@ -1,18 +1,18 @@
 use std::fmt::Write;
 
 use oxc_ast::{
-    ast::{AssignmentTargetProperty, Expression, PropertyKey},
     AstKind,
+    ast::{AssignmentTargetProperty, Expression, PropertyKey},
 };
 use oxc_diagnostics::OxcDiagnostic;
 use oxc_macros::declare_oxc_lint;
 use oxc_span::Span;
 use oxc_str::CompactStr;
 use schemars::JsonSchema;
-use serde::{de, Deserialize};
+use serde::{Deserialize, de};
 use serde_json::Value;
 
-use crate::{context::LintContext, rule::Rule, AstNode};
+use crate::{AstNode, context::LintContext, rule::Rule};
 
 fn no_restricted_properties_diagnostic(property: &PropertyDetails, span: Span) -> OxcDiagnostic {
     let mut warn_text = match &property.message {
@@ -61,35 +61,52 @@ fn identifier_name<'a>(expression: &'a Expression<'a>) -> Option<&'a str> {
     }
 }
 
-fn expression_property_name(expression: &Expression<'_>) -> Option<String> {
+fn expression_property_name(expression: &Expression<'_>) -> Option<CompactStr> {
     match expression {
-        Expression::StringLiteral(literal) => Some(literal.value.to_string()),
-        Expression::RegExpLiteral(literal) => literal.raw.map(|r| r.to_string()),
-        Expression::NumericLiteral(literal) => Some(literal.value.to_string()),
-        Expression::BigIntLiteral(literal) => Some(literal.value.to_string()),
-        Expression::BooleanLiteral(literal) => Some(literal.value.to_string()),
-        Expression::NullLiteral(_) => Some("null".to_string()),
+        Expression::StringLiteral(literal) => Some(CompactStr::from(literal.value.as_str())),
+        Expression::RegExpLiteral(literal) => literal.raw.map(|r| CompactStr::from(r.as_str())),
+        Expression::NumericLiteral(literal) => Some(CompactStr::from(literal.value.to_string())),
+        Expression::BigIntLiteral(literal) => Some(CompactStr::from(literal.value.as_str())),
+        Expression::BooleanLiteral(literal) => {
+            Some(CompactStr::from(if literal.value { "true" } else { "false" }))
+        }
+        Expression::NullLiteral(_) => Some(CompactStr::from("null")),
         Expression::TemplateLiteral(literal) if literal.quasis.len() == 1 => {
-            literal.quasis[0].value.cooked.map(|cooked| cooked.to_string())
+            literal.quasis[0].value.cooked.map(|cooked| CompactStr::from(cooked.as_str()))
         }
         _ => None,
     }
 }
 
-fn property_key_name_and_span(key: &PropertyKey<'_>) -> Option<(String, Span)> {
+fn property_key_name_and_span(key: &PropertyKey<'_>) -> Option<(CompactStr, Span)> {
     match key {
-        PropertyKey::Identifier(ident) => Some((ident.name.to_string(), ident.span)),
-        PropertyKey::StaticIdentifier(ident) => Some((ident.name.to_string(), ident.span)),
-        PropertyKey::PrivateIdentifier(ident) => Some((ident.name.to_string(), ident.span)),
-        PropertyKey::StringLiteral(literal) => Some((literal.value.to_string(), literal.span)),
-        PropertyKey::RegExpLiteral(literal) => literal.raw.map(|r| (r.to_string(), literal.span)),
-        PropertyKey::NumericLiteral(literal) => Some((literal.value.to_string(), literal.span)),
-        PropertyKey::BigIntLiteral(literal) => Some((literal.value.to_string(), literal.span)),
-        PropertyKey::BooleanLiteral(literal) => Some((literal.value.to_string(), literal.span)),
-        PropertyKey::NullLiteral(literal) => Some(("null".to_string(), literal.span)),
-        PropertyKey::TemplateLiteral(literal) if literal.quasis.len() == 1 => {
-            literal.quasis[0].value.cooked.map(|cooked| (cooked.to_string(), literal.span))
+        PropertyKey::Identifier(ident) => Some((CompactStr::from(ident.name.as_str()), ident.span)),
+        PropertyKey::StaticIdentifier(ident) => {
+            Some((CompactStr::from(ident.name.as_str()), ident.span))
         }
+        PropertyKey::PrivateIdentifier(ident) => {
+            Some((CompactStr::from(ident.name.as_str()), ident.span))
+        }
+        PropertyKey::StringLiteral(literal) => {
+            Some((CompactStr::from(literal.value.as_str()), literal.span))
+        }
+        PropertyKey::RegExpLiteral(literal) => {
+            literal.raw.map(|r| (CompactStr::from(r.as_str()), literal.span))
+        }
+        PropertyKey::NumericLiteral(literal) => {
+            Some((CompactStr::from(literal.value.to_string()), literal.span))
+        }
+        PropertyKey::BigIntLiteral(literal) => {
+            Some((CompactStr::from(literal.value.as_str()), literal.span))
+        }
+        PropertyKey::BooleanLiteral(literal) => {
+            Some((CompactStr::from(if literal.value { "true" } else { "false" }), literal.span))
+        }
+        PropertyKey::NullLiteral(literal) => Some((CompactStr::from("null"), literal.span)),
+        PropertyKey::TemplateLiteral(literal) if literal.quasis.len() == 1 => literal.quasis[0]
+            .value
+            .cooked
+            .map(|cooked| (CompactStr::from(cooked.as_str()), literal.span)),
         _ => None,
     }
 }
@@ -320,7 +337,7 @@ impl Rule for NoRestrictedProperties {
                 let properties = target.properties.iter().filter_map(|p| {
                     let (property_name, span) = match p {
                         AssignmentTargetProperty::AssignmentTargetPropertyIdentifier(ident) => {
-                            (ident.binding.name.to_string(), ident.binding.span)
+                            (CompactStr::from(ident.binding.name.as_str()), ident.binding.span)
                         }
                         AssignmentTargetProperty::AssignmentTargetPropertyProperty(prop) => {
                             property_key_name_and_span(&prop.name)?
@@ -333,7 +350,7 @@ impl Rule for NoRestrictedProperties {
                 for (property_name, span) in properties {
                     self.check_property_access(
                         object_name,
-                        Some(property_name.as_ref()),
+                        Some(property_name.as_str()),
                         span,
                         ctx,
                     );
@@ -364,7 +381,7 @@ impl Rule for NoRestrictedProperties {
                 for (property_name, span) in properties {
                     self.check_property_access(
                         object_name,
-                        Some(property_name.as_ref()),
+                        Some(property_name.as_str()),
                         span,
                         ctx,
                     );
@@ -732,12 +749,16 @@ fn test() {
 #[test]
 fn invalid_configs_error_in_from_configuration() {
     assert!(NoRestrictedProperties::from_configuration(serde_json::json!([{}])).is_err());
-    assert!(NoRestrictedProperties::from_configuration(
-        serde_json::json!([{ "object": "foo", "allowObjects": ["bar"] }])
-    )
-    .is_err());
-    assert!(NoRestrictedProperties::from_configuration(
-        serde_json::json!([{ "property": "foo", "allowProperties": ["bar"] }])
-    )
-    .is_err());
+    assert!(
+        NoRestrictedProperties::from_configuration(
+            serde_json::json!([{ "object": "foo", "allowObjects": ["bar"] }])
+        )
+        .is_err()
+    );
+    assert!(
+        NoRestrictedProperties::from_configuration(
+            serde_json::json!([{ "property": "foo", "allowProperties": ["bar"] }])
+        )
+        .is_err()
+    );
 }
