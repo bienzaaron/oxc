@@ -1,24 +1,26 @@
 use oxc_ast::{
-    ast::{AssignmentTargetProperty, Expression, PropertyKey},
     AstKind,
+    ast::{AssignmentTargetProperty, Expression, PropertyKey},
 };
 use oxc_diagnostics::OxcDiagnostic;
 use oxc_macros::declare_oxc_lint;
 use oxc_span::Span;
 use oxc_str::CompactStr;
 use schemars::JsonSchema;
-use serde::Deserialize;
-use serde_json::{Map, Value};
+use serde::{Deserialize, de};
+use serde_json::Value;
 
-use crate::{context::LintContext, rule::Rule, AstNode};
+use crate::{AstNode, context::LintContext, rule::Rule};
 
 fn no_restricted_properties_diagnostic(
     object_name_option: Option<&CompactStr>,
     property_name_option: Option<&CompactStr>,
     message_option: Option<&CompactStr>,
+    allow_objects: Option<&[CompactStr]>,
+    allow_properties: Option<&[CompactStr]>,
     span: Span,
 ) -> OxcDiagnostic {
-    let warn_text = match message_option {
+    let mut warn_text = match message_option {
         Some(message) => message.as_str().to_string(),
         _ => match (object_name_option, property_name_option) {
             (Some(object_name), Some(property_name)) => {
@@ -34,6 +36,20 @@ fn no_restricted_properties_diagnostic(
         },
     };
 
+    if let (Some(property_name), Some(allow_objects)) = (property_name_option, allow_objects) {
+        warn_text.push_str(&format!(
+            " Property '{property_name}' is only allowed on these objects: {}.",
+            allow_objects.iter().map(CompactStr::as_str).collect::<Vec<_>>().join(", ")
+        ));
+    }
+
+    if let Some(allow_properties) = allow_properties {
+        warn_text.push_str(&format!(
+            " Only these properties are allowed: {}.",
+            allow_properties.iter().map(CompactStr::as_str).collect::<Vec<_>>().join(", ")
+        ));
+    }
+
     OxcDiagnostic::warn(warn_text).with_label(span)
 }
 
@@ -45,6 +61,24 @@ struct PropertyDetails {
     message: Option<CompactStr>,
     allow_objects: Option<Vec<CompactStr>>,
     allow_properties: Option<Vec<CompactStr>>,
+}
+
+impl PropertyDetails {
+    fn validate(&self) -> Result<(), serde_json::Error> {
+        if self.object.is_none() && self.property.is_none() {
+            return Err(de::Error::custom("expected either `object` or `property`"));
+        }
+
+        if self.object.is_some() && self.allow_objects.is_some() {
+            return Err(de::Error::custom("`allowObjects` cannot be used with `object`"));
+        }
+
+        if self.property.is_some() && self.allow_properties.is_some() {
+            return Err(de::Error::custom("`allowProperties` cannot be used with `property`"));
+        }
+
+        Ok(())
+    }
 }
 
 #[derive(Debug, Default, Clone, JsonSchema, Deserialize)]
@@ -144,33 +178,22 @@ declare_oxc_lint!(
     version = "next",
 );
 
-fn add_configuration_properties_from_object(
-    properties: &mut Vec<PropertyDetails>,
-    property_details: &Map<String, Value>,
-) {
-    match serde_json::from_value::<PropertyDetails>(serde_json::Value::Object(
-        property_details.clone(),
-    )) {
-        Ok(details) => properties.push(details),
-        _ => (),
-    }
-}
-
 impl Rule for NoRestrictedProperties {
     fn from_configuration(value: serde_json::Value) -> Result<Self, serde_json::error::Error> {
         let mut properties: Vec<PropertyDetails> = Vec::new();
-        match &value {
+        match value {
             Value::Array(config_properties) => {
-                config_properties.iter().for_each(|property_details| match property_details {
-                    Value::Object(property_details) => {
-                        add_configuration_properties_from_object(&mut properties, property_details)
-                    }
-
-                    _ => (),
-                })
+                for property_details in config_properties {
+                    let details = serde_json::from_value::<PropertyDetails>(property_details)?;
+                    details.validate()?;
+                    properties.push(details);
+                }
             }
             Value::Object(property_details) => {
-                add_configuration_properties_from_object(&mut properties, property_details)
+                let details =
+                    serde_json::from_value::<PropertyDetails>(Value::Object(property_details))?;
+                details.validate()?;
+                properties.push(details);
             }
             _ => {}
         }
@@ -307,6 +330,8 @@ impl NoRestrictedProperties {
                     property.object.as_ref(),
                     property.property.as_ref(),
                     property.message.as_ref(),
+                    property.allow_objects.as_deref(),
+                    property.allow_properties.as_deref(),
                     span,
                 ));
             }
@@ -621,4 +646,21 @@ fn test() {
 
     Tester::new(NoRestrictedProperties::NAME, NoRestrictedProperties::PLUGIN, pass, fail)
         .test_and_snapshot();
+}
+
+#[test]
+fn invalid_configs_error_in_from_configuration() {
+    assert!(NoRestrictedProperties::from_configuration(serde_json::json!([{}])).is_err());
+    assert!(
+        NoRestrictedProperties::from_configuration(
+            serde_json::json!([{ "object": "foo", "allowObjects": ["bar"] }])
+        )
+        .is_err()
+    );
+    assert!(
+        NoRestrictedProperties::from_configuration(
+            serde_json::json!([{ "property": "foo", "allowProperties": ["bar"] }])
+        )
+        .is_err()
+    );
 }
