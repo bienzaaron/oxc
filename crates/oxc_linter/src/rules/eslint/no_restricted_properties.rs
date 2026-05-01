@@ -1,5 +1,6 @@
 use std::fmt::Write;
 
+use itertools::Itertools;
 use schemars::JsonSchema;
 use serde::{Deserialize, de};
 use serde_json::Value;
@@ -38,7 +39,7 @@ fn no_restricted_properties_diagnostic(property: &PropertyDetails, span: Span) -
         write!(
             warn_text,
             " Property '{property_name}' is only allowed on these objects: {}.",
-            allow_objects.iter().map(CompactStr::as_str).collect::<Vec<_>>().join(", ")
+            allow_objects.iter().map(CompactStr::as_str).join(", ")
         )
         .unwrap();
     }
@@ -47,7 +48,7 @@ fn no_restricted_properties_diagnostic(property: &PropertyDetails, span: Span) -
         write!(
             warn_text,
             " Only these properties are allowed: {}.",
-            allow_properties.iter().map(CompactStr::as_str).collect::<Vec<_>>().join(", ")
+            allow_properties.iter().map(CompactStr::as_str).join(", ")
         )
         .unwrap();
     }
