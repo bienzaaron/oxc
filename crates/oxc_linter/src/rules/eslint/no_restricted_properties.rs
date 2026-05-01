@@ -17,20 +17,17 @@ use oxc_str::CompactStr;
 use crate::{AstNode, context::LintContext, rule::Rule};
 
 fn no_restricted_properties_diagnostic(property: &PropertyDetails, span: Span) -> OxcDiagnostic {
-    let mut warn_text = match &property.message {
-        Some(message) => message.as_str().to_string(),
-        _ => match (&property.object, &property.property) {
-            (Some(object_name), Some(property_name)) => {
-                format!("'{object_name}.{property_name}' is restricted from being used.")
-            }
-            (None, Some(property_name)) => {
-                format!("'{property_name}' is restricted from being used.")
-            }
-            (Some(object_name), None) => {
-                format!("'{object_name}' is restricted from being used.")
-            }
-            _ => "This value is restricted from being used.".to_string(),
-        },
+    let mut warn_text = match (&property.object, &property.property) {
+        (Some(object_name), Some(property_name)) => {
+            format!("'{object_name}.{property_name}' is restricted from being used.")
+        }
+        (None, Some(property_name)) => {
+            format!("'{property_name}' is restricted from being used.")
+        }
+        (Some(object_name), None) => {
+            format!("'{object_name}' is restricted from being used.")
+        }
+        _ => "This value is restricted from being used.".to_string(),
     };
 
     if let (Some(property_name), Some(allow_objects)) =
@@ -53,7 +50,13 @@ fn no_restricted_properties_diagnostic(property: &PropertyDetails, span: Span) -
         .unwrap();
     }
 
-    OxcDiagnostic::warn(warn_text).with_label(span)
+    let diagnostic = OxcDiagnostic::warn(warn_text).with_label(span);
+
+    if let Some(message) = &property.message {
+        diagnostic.with_help(message.as_str().to_string())
+    } else {
+        diagnostic
+    }
 }
 
 #[derive(Debug, Default, Clone, Deserialize, JsonSchema)]

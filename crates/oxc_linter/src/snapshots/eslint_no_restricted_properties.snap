@@ -8,11 +8,12 @@ source: crates/oxc_linter/src/tester.rs
    · ─────────────────────────────
    ╰────
 
-  ⚠ eslint(no-restricted-properties): Please use someObject.allowedProperty instead.
+  ⚠ eslint(no-restricted-properties): 'someObject.disallowedProperty' is restricted from being used.
    ╭─[no_restricted_properties.tsx:1:1]
  1 │ someObject.disallowedProperty
    · ─────────────────────────────
    ╰────
+  help: Please use someObject.allowedProperty instead.
 
   ⚠ eslint(no-restricted-properties): 'someObject.disallowedProperty' is restricted from being used.
    ╭─[no_restricted_properties.tsx:1:1]
@@ -26,17 +27,19 @@ source: crates/oxc_linter/src/tester.rs
    ·                                ───────────────────────────────────────
    ╰────
 
-  ⚠ eslint(no-restricted-properties): Please use Object.getPrototypeOf instead.
+  ⚠ eslint(no-restricted-properties): '__proto__' is restricted from being used.
    ╭─[no_restricted_properties.tsx:1:5]
  1 │ foo.__proto__
    ·     ─────────
    ╰────
+  help: Please use Object.getPrototypeOf instead.
 
-  ⚠ eslint(no-restricted-properties): Please use Object.getPrototypeOf instead.
+  ⚠ eslint(no-restricted-properties): '__proto__' is restricted from being used.
    ╭─[no_restricted_properties.tsx:1:5]
  1 │ foo['__proto__']
    ·     ───────────
    ╰────
+  help: Please use Object.getPrototypeOf instead.
 
   ⚠ eslint(no-restricted-properties): 'foo' is restricted from being used.
    ╭─[no_restricted_properties.tsx:1:1]
@@ -110,11 +113,12 @@ source: crates/oxc_linter/src/tester.rs
    ·     ─────
    ╰────
 
-  ⚠ eslint(no-restricted-properties): Please call require() directly.
+  ⚠ eslint(no-restricted-properties): 'require' is restricted from being used.
    ╭─[no_restricted_properties.tsx:1:1]
  1 │ require.call({}, 'foo')
    · ───────
    ╰────
+  help: Please call require() directly.
 
   ⚠ eslint(no-restricted-properties): 'require' is restricted from being used.
    ╭─[no_restricted_properties.tsx:1:1]
@@ -296,11 +300,12 @@ source: crates/oxc_linter/src/tester.rs
    ·            ──────────────────
    ╰────
 
-  ⚠ eslint(no-restricted-properties): Please use someObject.allowedProperty instead. Property 'disallowedProperty' is only allowed on these objects: anotherObject.
+  ⚠ eslint(no-restricted-properties): 'disallowedProperty' is restricted from being used. Property 'disallowedProperty' is only allowed on these objects: anotherObject.
    ╭─[no_restricted_properties.tsx:1:12]
  1 │ someObject.disallowedProperty
    ·            ──────────────────
    ╰────
+  help: Please use someObject.allowedProperty instead.
 
   ⚠ eslint(no-restricted-properties): 'disallowedProperty' is restricted from being used. Property 'disallowedProperty' is only allowed on these objects: anotherObject.
    ╭─[no_restricted_properties.tsx:1:12]
@@ -320,11 +325,12 @@ source: crates/oxc_linter/src/tester.rs
    · ──────────
    ╰────
 
-  ⚠ eslint(no-restricted-properties): Please use someObject.allowedProperty instead. Only these properties are allowed: allowedProperty.
+  ⚠ eslint(no-restricted-properties): 'someObject' is restricted from being used. Only these properties are allowed: allowedProperty.
    ╭─[no_restricted_properties.tsx:1:1]
  1 │ someObject.disallowedProperty
    · ──────────
    ╰────
+  help: Please use someObject.allowedProperty instead.
 
   ⚠ eslint(no-restricted-properties): 'someObject' is restricted from being used. Only these properties are allowed: anotherDisallowedProperty.
    ╭─[no_restricted_properties.tsx:1:1]
