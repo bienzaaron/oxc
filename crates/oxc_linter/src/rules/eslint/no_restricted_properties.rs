@@ -137,6 +137,9 @@ declare_oxc_lint!(
     /// to disallow using describe.only when using Mocha or telling people to use Object.assign
     /// instead of _.extend.
     ///
+    /// If you want to disallow APIs marked with `@deprecated`, consider using the type-aware
+    /// `typescript/no-deprecated` rule instead.
+    ///
     /// ### Examples
     ///
     /// **With options:**
