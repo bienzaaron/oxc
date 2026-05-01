@@ -216,7 +216,11 @@ impl Rule for NoRestrictedProperties {
                     properties.push(details);
                 }
             }
-            _ => return Err(de::Error::custom("expected array of restricted properties")),
+            unexpected => {
+                return Err(de::Error::custom(format!(
+                    "expected array of restricted properties but got {unexpected}"
+                )));
+            }
         }
         Ok(Self { restricted_properties: Box::new(PropertyDetailsList(properties)) })
     }
@@ -226,10 +230,9 @@ impl Rule for NoRestrictedProperties {
             AstKind::StaticMemberExpression(expression) => {
                 let object_name =
                     expression.object.get_identifier_reference().map(|ident| ident.name.as_str());
-                let property_name = expression.property.name.as_str();
                 self.check_property_access(
                     object_name,
-                    Some(property_name),
+                    Some(expression.property.name.as_str()),
                     PropertyAccessSpans {
                         object: Some(expression.object.span()),
                         property: expression.property.span,
@@ -727,13 +730,14 @@ fn test() {
 #[test]
 fn invalid_configs_error_in_from_configuration() {
     assert!(NoRestrictedProperties::from_configuration(serde_json::json!([{}])).is_err());
-    assert!(
-        NoRestrictedProperties::from_configuration(
-            serde_json::json!({ "object": "foo", "property": "bar" })
-        )
-        .is_err()
-    );
-    assert!(NoRestrictedProperties::from_configuration(serde_json::json!("foo")).is_err());
+    let object_error = NoRestrictedProperties::from_configuration(
+        serde_json::json!({ "object": "foo", "property": "bar" }),
+    )
+    .unwrap_err();
+    assert!(object_error.to_string().contains("but got {"));
+    let string_error =
+        NoRestrictedProperties::from_configuration(serde_json::json!("foo")).unwrap_err();
+    assert!(string_error.to_string().contains("but got \"foo\""));
     assert!(
         NoRestrictedProperties::from_configuration(
             serde_json::json!([{ "object": "foo", "allowObjects": ["bar"] }])
