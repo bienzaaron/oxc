@@ -56,45 +56,21 @@ fn no_restricted_properties_diagnostic(property: &PropertyDetails, span: Span) -
     OxcDiagnostic::warn(warn_text).with_label(span)
 }
 
-fn expression_property_name(expression: &Expression<'_>) -> Option<CompactStr> {
-    match expression {
-        Expression::StringLiteral(literal) => Some(CompactStr::from(literal.value.as_str())),
-        Expression::RegExpLiteral(literal) => literal.raw.map(|r| CompactStr::from(r.as_str())),
-        Expression::NumericLiteral(literal) => Some(CompactStr::from(literal.value.to_string())),
-        Expression::BigIntLiteral(literal) => Some(CompactStr::from(literal.value.as_str())),
-        Expression::BooleanLiteral(literal) => {
-            Some(CompactStr::from(if literal.value { "true" } else { "false" }))
-        }
-        Expression::NullLiteral(_) => Some(CompactStr::from("null")),
-        Expression::TemplateLiteral(literal) if literal.quasis.len() == 1 => {
-            literal.quasis[0].value.cooked.map(|cooked| CompactStr::from(cooked.as_str()))
-        }
-        _ => None,
-    }
-}
-
-fn property_key_name_and_span(key: &PropertyKey<'_>) -> Option<(CompactStr, Span)> {
-    match key {
-        PropertyKey::Identifier(ident) => Some((CompactStr::from(ident.name.as_str()), ident.span)),
-        PropertyKey::StaticIdentifier(ident) => {
-            Some((CompactStr::from(ident.name.as_str()), ident.span))
-        }
-        PropertyKey::PrivateIdentifier(ident) => {
-            Some((CompactStr::from(ident.name.as_str()), ident.span))
-        }
-        match_expression!(PropertyKey) => {
-            expression_property_name(key.to_expression()).map(|name| (name, key.span()))
-        }
-    }
-}
-
 #[derive(Debug, Default, Clone, Deserialize, JsonSchema)]
 #[serde(rename_all = "camelCase", default, deny_unknown_fields)]
 struct PropertyDetails {
+    /// The object on which the property is being accessed.
     object: Option<CompactStr>,
+    /// The property being accessed. If `object` is not specified, this applies to the named
+    /// property on all objects.
     property: Option<CompactStr>,
+    /// A custom message to display.
     message: Option<CompactStr>,
+    /// Objects where property access should be allowed. This must be used with `property` and
+    /// cannot be used with `object`.
     allow_objects: Option<Vec<CompactStr>>,
+    /// Properties where property access should be allowed. This must be used with `object` and
+    /// cannot be used with `property`.
     allow_properties: Option<Vec<CompactStr>>,
 }
 
@@ -388,6 +364,38 @@ impl NoRestrictedProperties {
                 };
                 ctx.diagnostic(no_restricted_properties_diagnostic(property, span));
             }
+        }
+    }
+}
+
+fn expression_property_name(expression: &Expression<'_>) -> Option<CompactStr> {
+    match expression {
+        Expression::StringLiteral(literal) => Some(CompactStr::from(literal.value.as_str())),
+        Expression::RegExpLiteral(literal) => literal.raw.map(|r| CompactStr::from(r.as_str())),
+        Expression::NumericLiteral(literal) => Some(CompactStr::from(literal.value.to_string())),
+        Expression::BigIntLiteral(literal) => Some(CompactStr::from(literal.value.as_str())),
+        Expression::BooleanLiteral(literal) => {
+            Some(CompactStr::from(if literal.value { "true" } else { "false" }))
+        }
+        Expression::NullLiteral(_) => Some(CompactStr::from("null")),
+        Expression::TemplateLiteral(literal) if literal.quasis.len() == 1 => {
+            literal.quasis[0].value.cooked.map(|cooked| CompactStr::from(cooked.as_str()))
+        }
+        _ => None,
+    }
+}
+
+fn property_key_name_and_span(key: &PropertyKey<'_>) -> Option<(CompactStr, Span)> {
+    match key {
+        PropertyKey::Identifier(ident) => Some((CompactStr::from(ident.name.as_str()), ident.span)),
+        PropertyKey::StaticIdentifier(ident) => {
+            Some((CompactStr::from(ident.name.as_str()), ident.span))
+        }
+        PropertyKey::PrivateIdentifier(ident) => {
+            Some((CompactStr::from(ident.name.as_str()), ident.span))
+        }
+        match_expression!(PropertyKey) => {
+            expression_property_name(key.to_expression()).map(|name| (name, key.span()))
         }
     }
 }
