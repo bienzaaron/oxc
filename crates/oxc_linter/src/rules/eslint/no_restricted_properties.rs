@@ -7,7 +7,7 @@ use serde_json::Value;
 
 use oxc_ast::{
     AstKind,
-    ast::{AssignmentTargetProperty, Expression, PropertyKey},
+    ast::{AssignmentTargetProperty, Expression, PropertyKey, match_expression},
 };
 use oxc_diagnostics::OxcDiagnostic;
 use oxc_macros::declare_oxc_lint;
@@ -82,27 +82,9 @@ fn property_key_name_and_span(key: &PropertyKey<'_>) -> Option<(CompactStr, Span
         PropertyKey::PrivateIdentifier(ident) => {
             Some((CompactStr::from(ident.name.as_str()), ident.span))
         }
-        PropertyKey::StringLiteral(literal) => {
-            Some((CompactStr::from(literal.value.as_str()), literal.span))
+        match_expression!(PropertyKey) => {
+            expression_property_name(key.to_expression()).map(|name| (name, key.span()))
         }
-        PropertyKey::RegExpLiteral(literal) => {
-            literal.raw.map(|r| (CompactStr::from(r.as_str()), literal.span))
-        }
-        PropertyKey::NumericLiteral(literal) => {
-            Some((CompactStr::from(literal.value.to_string()), literal.span))
-        }
-        PropertyKey::BigIntLiteral(literal) => {
-            Some((CompactStr::from(literal.value.as_str()), literal.span))
-        }
-        PropertyKey::BooleanLiteral(literal) => {
-            Some((CompactStr::from(if literal.value { "true" } else { "false" }), literal.span))
-        }
-        PropertyKey::NullLiteral(literal) => Some((CompactStr::from("null"), literal.span)),
-        PropertyKey::TemplateLiteral(literal) if literal.quasis.len() == 1 => literal.quasis[0]
-            .value
-            .cooked
-            .map(|cooked| (CompactStr::from(cooked.as_str()), literal.span)),
-        _ => None,
     }
 }
 
