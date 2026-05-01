@@ -338,8 +338,10 @@ impl NoRestrictedProperties {
         for property in &self.restricted_properties.0 {
             let object_matches =
                 property.object.as_deref().is_none_or(|name| object_name == Some(name));
-            let property_matches =
-                property.property.as_deref().is_none_or(|name| Some(name) == property_name);
+            let property_matches = match property.property.as_deref() {
+                Some(name) => Some(name) == property_name,
+                None => property_name.is_some(),
+            };
             let object_allowed = property.allow_objects.as_deref().is_some_and(|allow| {
                 object_name
                     .is_some_and(|obj_name| allow.iter().any(|check| check.as_str() == obj_name))
@@ -563,6 +565,10 @@ fn test() {
             Some(serde_json::json!([ { "object": "foo", "allowProperties": ["baz"], }, ])),
         ), // { "ecmaVersion": 6 }
         ("(foo || bar).baz", Some(serde_json::json!([{ "object": "foo", "property": "baz" }]))),
+        (
+            "legacyApi[method]",
+            Some(serde_json::json!([ { "object": "legacyApi", "allowProperties": ["safe"], }, ])),
+        ),
     ];
 
     let fail = vec![
