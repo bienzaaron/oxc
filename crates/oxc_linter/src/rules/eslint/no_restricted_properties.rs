@@ -1,5 +1,9 @@
 use std::fmt::Write;
 
+use schemars::JsonSchema;
+use serde::{Deserialize, de};
+use serde_json::Value;
+
 use oxc_ast::{
     AstKind,
     ast::{AssignmentTargetProperty, Expression, PropertyKey},
@@ -8,9 +12,6 @@ use oxc_diagnostics::OxcDiagnostic;
 use oxc_macros::declare_oxc_lint;
 use oxc_span::{GetSpan, Span};
 use oxc_str::CompactStr;
-use schemars::JsonSchema;
-use serde::{Deserialize, de};
-use serde_json::Value;
 
 use crate::{AstNode, context::LintContext, rule::Rule};
 
