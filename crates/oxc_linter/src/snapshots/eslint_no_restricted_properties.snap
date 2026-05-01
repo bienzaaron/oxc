@@ -3,27 +3,27 @@ source: crates/oxc_linter/src/tester.rs
 ---
 
   ⚠ eslint(no-restricted-properties): 'someObject.disallowedProperty' is restricted from being used.
-   ╭─[no_restricted_properties.tsx:1:12]
+   ╭─[no_restricted_properties.tsx:1:1]
  1 │ someObject.disallowedProperty
-   ·            ──────────────────
+   · ─────────────────────────────
    ╰────
 
   ⚠ eslint(no-restricted-properties): Please use someObject.allowedProperty instead.
-   ╭─[no_restricted_properties.tsx:1:12]
+   ╭─[no_restricted_properties.tsx:1:1]
  1 │ someObject.disallowedProperty
-   ·            ──────────────────
+   · ─────────────────────────────
    ╰────
 
   ⚠ eslint(no-restricted-properties): 'someObject.disallowedProperty' is restricted from being used.
-   ╭─[no_restricted_properties.tsx:1:12]
+   ╭─[no_restricted_properties.tsx:1:1]
  1 │ someObject.disallowedProperty; anotherObject.anotherDisallowedProperty()
-   ·            ──────────────────
+   · ─────────────────────────────
    ╰────
 
   ⚠ eslint(no-restricted-properties): 'anotherObject.anotherDisallowedProperty' is restricted from being used.
-   ╭─[no_restricted_properties.tsx:1:46]
+   ╭─[no_restricted_properties.tsx:1:32]
  1 │ someObject.disallowedProperty; anotherObject.anotherDisallowedProperty()
-   ·                                              ─────────────────────────
+   ·                                ───────────────────────────────────────
    ╰────
 
   ⚠ eslint(no-restricted-properties): Please use Object.getPrototypeOf instead.
@@ -39,21 +39,21 @@ source: crates/oxc_linter/src/tester.rs
    ╰────
 
   ⚠ eslint(no-restricted-properties): 'foo' is restricted from being used.
-   ╭─[no_restricted_properties.tsx:1:5]
+   ╭─[no_restricted_properties.tsx:1:1]
  1 │ foo.bar.baz;
-   ·     ───
+   · ───
    ╰────
 
   ⚠ eslint(no-restricted-properties): 'foo' is restricted from being used.
-   ╭─[no_restricted_properties.tsx:1:5]
+   ╭─[no_restricted_properties.tsx:1:1]
  1 │ foo.bar();
-   ·     ───
+   · ───
    ╰────
 
   ⚠ eslint(no-restricted-properties): 'foo' is restricted from being used.
-   ╭─[no_restricted_properties.tsx:1:5]
+   ╭─[no_restricted_properties.tsx:1:1]
  1 │ foo.bar.baz();
-   ·     ───
+   · ───
    ╰────
 
   ⚠ eslint(no-restricted-properties): 'bar' is restricted from being used.
@@ -111,15 +111,15 @@ source: crates/oxc_linter/src/tester.rs
    ╰────
 
   ⚠ eslint(no-restricted-properties): Please call require() directly.
-   ╭─[no_restricted_properties.tsx:1:9]
+   ╭─[no_restricted_properties.tsx:1:1]
  1 │ require.call({}, 'foo')
-   ·         ────
+   · ───────
    ╰────
 
   ⚠ eslint(no-restricted-properties): 'require' is restricted from being used.
-   ╭─[no_restricted_properties.tsx:1:9]
+   ╭─[no_restricted_properties.tsx:1:1]
  1 │ require['resolve']
-   ·         ─────────
+   · ───────
    ╰────
 
   ⚠ eslint(no-restricted-properties): 'foo.bar' is restricted from being used.
@@ -315,25 +315,25 @@ source: crates/oxc_linter/src/tester.rs
    ╰────
 
   ⚠ eslint(no-restricted-properties): 'someObject' is restricted from being used. Only these properties are allowed: allowedProperty.
-   ╭─[no_restricted_properties.tsx:1:12]
+   ╭─[no_restricted_properties.tsx:1:1]
  1 │ someObject.disallowedProperty
-   ·            ──────────────────
+   · ──────────
    ╰────
 
   ⚠ eslint(no-restricted-properties): Please use someObject.allowedProperty instead. Only these properties are allowed: allowedProperty.
-   ╭─[no_restricted_properties.tsx:1:12]
+   ╭─[no_restricted_properties.tsx:1:1]
  1 │ someObject.disallowedProperty
-   ·            ──────────────────
+   · ──────────
    ╰────
 
   ⚠ eslint(no-restricted-properties): 'someObject' is restricted from being used. Only these properties are allowed: anotherDisallowedProperty.
-   ╭─[no_restricted_properties.tsx:1:12]
+   ╭─[no_restricted_properties.tsx:1:1]
  1 │ someObject.disallowedProperty; anotherObject.anotherDisallowedProperty()
-   ·            ──────────────────
+   · ──────────
    ╰────
 
   ⚠ eslint(no-restricted-properties): 'anotherObject' is restricted from being used. Only these properties are allowed: disallowedProperty.
-   ╭─[no_restricted_properties.tsx:1:46]
+   ╭─[no_restricted_properties.tsx:1:32]
  1 │ someObject.disallowedProperty; anotherObject.anotherDisallowedProperty()
-   ·                                              ─────────────────────────
+   ·                                ─────────────
    ╰────

@@ -98,6 +98,16 @@ struct PropertyDetails {
     allow_properties: Option<Vec<CompactStr>>,
 }
 
+#[derive(Debug, Clone, Copy)]
+struct PropertyAccessSpans {
+    /// Span of the access object, such as `foo` in `foo.bar`.
+    object: Option<Span>,
+    /// Span of the accessed property, such as `bar` in `foo.bar`.
+    property: Span,
+    /// Span of the complete property access, such as `foo.bar`.
+    access: Span,
+}
+
 #[derive(Debug, Default, Clone, JsonSchema, Deserialize)]
 struct PropertyDetailsList(Vec<PropertyDetails>);
 
@@ -211,52 +221,6 @@ declare_oxc_lint!(
     /// legacyApi.stableMethod()
     /// ```
     ///
-    /// ### Options
-    ///
-    /// This rule takes a list of objects detailing the property to be disallowed.
-    ///
-    /// "no-restricted-properties": [
-    ///   "error",
-    ///   {
-    ///      "object": "JSON",
-    ///      "property": "parse"
-    ///   },
-    ///   {
-    ///      "object": "JSON",
-    ///      "property": "stringify"
-    ///   }
-    /// ]
-    ///
-    /// #### details.object
-    ///
-    /// The object on which the property is being accessed.
-    ///
-    /// #### details.property
-    ///
-    /// The property being accessed. If `details.object` is not specified, then the rule applies to
-    /// the named property on all objects.
-    ///
-    /// #### details.message
-    ///
-    /// A custom message to display. This can be helpful if you want to guide users to using the
-    /// correct API.
-    ///
-    /// #### details.allowObjects
-    ///
-    /// An allowlist of objects, where property access should be allowed. This option must be used
-    /// alongside `details.property` and cannot be used alongside `details.object`.
-    ///
-    /// This is useful when you want to globally disable property access for a property, but allow
-    /// access on certain objects.
-    ///
-    /// #### details.allowProperties
-    ///
-    /// An allowlist of properties, where property access should be allowed. This option must be
-    /// used alongside `details.object` and cannot be used alongside `details.property`.
-    ///
-    /// This is useful when you want to globally disable property access for an object, but allow
-    /// certain properties.
-    ///
     NoRestrictedProperties,
     eslint,
     restriction,
@@ -296,7 +260,11 @@ impl Rule for NoRestrictedProperties {
                 self.check_property_access(
                     object_name,
                     Some(property_name),
-                    expression.property.span,
+                    PropertyAccessSpans {
+                        object: Some(expression.object.span()),
+                        property: expression.property.span,
+                        access: expression.span,
+                    },
                     ctx,
                 );
             }
@@ -307,7 +275,11 @@ impl Rule for NoRestrictedProperties {
                 self.check_property_access(
                     object_name,
                     property_name.as_deref(),
-                    expression.expression.span(),
+                    PropertyAccessSpans {
+                        object: Some(expression.object.span()),
+                        property: expression.expression.span(),
+                        access: expression.span,
+                    },
                     ctx,
                 );
             }
@@ -337,7 +309,7 @@ impl Rule for NoRestrictedProperties {
                     self.check_property_access(
                         object_name,
                         Some(property_name.as_str()),
-                        span,
+                        PropertyAccessSpans { object: None, property: span, access: span },
                         ctx,
                     );
                 }
@@ -377,7 +349,7 @@ impl Rule for NoRestrictedProperties {
                     self.check_property_access(
                         object_name,
                         Some(property_name.as_str()),
-                        span,
+                        PropertyAccessSpans { object: None, property: span, access: span },
                         ctx,
                     );
                 }
@@ -392,7 +364,7 @@ impl NoRestrictedProperties {
         &self,
         object_name: Option<&str>,
         property_name: Option<&str>,
-        span: Span,
+        spans: PropertyAccessSpans,
         ctx: &LintContext<'_>,
     ) {
         for property in &self.restricted_properties.0 {
@@ -409,6 +381,11 @@ impl NoRestrictedProperties {
             });
 
             if object_matches && property_matches && !object_allowed && !property_allowed {
+                let span = match (&property.object, &property.property) {
+                    (Some(_), Some(_)) => spans.access,
+                    (Some(_), None) => spans.object.unwrap_or(spans.property),
+                    _ => spans.property,
+                };
                 ctx.diagnostic(no_restricted_properties_diagnostic(property, span));
             }
         }
