@@ -56,13 +56,6 @@ fn no_restricted_properties_diagnostic(property: &PropertyDetails, span: Span) -
     OxcDiagnostic::warn(warn_text).with_label(span)
 }
 
-fn identifier_name<'a>(expression: &'a Expression<'a>) -> Option<&'a str> {
-    match expression {
-        Expression::Identifier(identifier) => Some(identifier.name.as_str()),
-        _ => None,
-    }
-}
-
 fn expression_property_name(expression: &Expression<'_>) -> Option<CompactStr> {
     match expression {
         Expression::StringLiteral(literal) => Some(CompactStr::from(literal.value.as_str())),
@@ -337,7 +330,9 @@ impl Rule for NoRestrictedProperties {
                 let parent_node = ctx.nodes().parent_node(target.node_id());
 
                 let object_name = match parent_node.kind() {
-                    AstKind::AssignmentExpression(expression) => identifier_name(&expression.right),
+                    AstKind::AssignmentExpression(expression) => {
+                        expression.right.get_identifier_reference().map(|ident| ident.name.as_str())
+                    }
                     _ => None,
                 };
                 let properties = target.properties.iter().filter_map(|p| {
@@ -367,14 +362,23 @@ impl Rule for NoRestrictedProperties {
 
                 let object_name = match parent_node.kind() {
                     AstKind::VariableDeclarator(declarator) => {
-                        declarator.init.as_ref().and_then(identifier_name)
+                        declarator
+                            .init
+                            .as_ref()
+                            .and_then(|init| init.get_identifier_reference())
+                            .map(|ident| ident.name.as_str())
                     }
-                    AstKind::AssignmentExpression(expression) => identifier_name(&expression.right),
-                    AstKind::AssignmentPattern(assignment_pattern) => {
-                        identifier_name(&assignment_pattern.right)
+                    AstKind::AssignmentExpression(expression) => {
+                        expression.right.get_identifier_reference().map(|ident| ident.name.as_str())
                     }
+                    AstKind::AssignmentPattern(assignment_pattern) => assignment_pattern
+                        .right
+                        .get_identifier_reference()
+                        .map(|ident| ident.name.as_str()),
                     AstKind::FormalParameter(parameter) => {
-                        parameter.initializer.as_deref().and_then(identifier_name)
+                        parameter.initializer.as_deref().and_then(|initializer| {
+                            initializer.get_identifier_reference().map(|ident| ident.name.as_str())
+                        })
                     }
                     _ => None,
                 };
