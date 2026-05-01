@@ -1,4 +1,4 @@
-use std::fmt::Write;
+use std::{borrow::Cow, fmt::Write};
 
 use itertools::Itertools;
 use schemars::JsonSchema;
@@ -216,13 +216,7 @@ impl Rule for NoRestrictedProperties {
                     properties.push(details);
                 }
             }
-            Value::Object(property_details) => {
-                let details =
-                    serde_json::from_value::<PropertyDetails>(Value::Object(property_details))?;
-                details.validate()?;
-                properties.push(details);
-            }
-            _ => {}
+            _ => return Err(de::Error::custom("expected array of restricted properties")),
         }
         Ok(Self { restricted_properties: Box::new(PropertyDetailsList(properties)) })
     }
@@ -271,7 +265,7 @@ impl Rule for NoRestrictedProperties {
                 let properties = target.properties.iter().filter_map(|p| {
                     let (property_name, span) = match p {
                         AssignmentTargetProperty::AssignmentTargetPropertyIdentifier(ident) => {
-                            (CompactStr::from(ident.binding.name.as_str()), ident.binding.span)
+                            (Cow::Borrowed(ident.binding.name.as_str()), ident.binding.span)
                         }
                         AssignmentTargetProperty::AssignmentTargetPropertyProperty(prop) => {
                             property_key_name_and_span(&prop.name)?
@@ -284,7 +278,7 @@ impl Rule for NoRestrictedProperties {
                 for (property_name, span) in properties {
                     self.check_property_access(
                         object_name,
-                        Some(property_name.as_str()),
+                        Some(property_name.as_ref()),
                         PropertyAccessSpans { object: None, property: span, access: span },
                         ctx,
                     );
@@ -294,13 +288,11 @@ impl Rule for NoRestrictedProperties {
                 let parent_node = ctx.nodes().parent_node(pattern.node_id());
 
                 let object_name = match parent_node.kind() {
-                    AstKind::VariableDeclarator(declarator) => {
-                        declarator
-                            .init
-                            .as_ref()
-                            .and_then(|init| init.get_identifier_reference())
-                            .map(|ident| ident.name.as_str())
-                    }
+                    AstKind::VariableDeclarator(declarator) => declarator
+                        .init
+                        .as_ref()
+                        .and_then(|init| init.get_identifier_reference())
+                        .map(|ident| ident.name.as_str()),
                     AstKind::AssignmentExpression(expression) => {
                         expression.right.get_identifier_reference().map(|ident| ident.name.as_str())
                     }
@@ -324,7 +316,7 @@ impl Rule for NoRestrictedProperties {
                 for (property_name, span) in properties {
                     self.check_property_access(
                         object_name,
-                        Some(property_name.as_str()),
+                        Some(property_name.as_ref()),
                         PropertyAccessSpans { object: None, property: span, access: span },
                         ctx,
                     );
@@ -368,31 +360,31 @@ impl NoRestrictedProperties {
     }
 }
 
-fn expression_property_name(expression: &Expression<'_>) -> Option<CompactStr> {
+fn expression_property_name<'a>(expression: &'a Expression<'a>) -> Option<Cow<'a, str>> {
     match expression {
-        Expression::StringLiteral(literal) => Some(CompactStr::from(literal.value.as_str())),
-        Expression::RegExpLiteral(literal) => literal.raw.map(|r| CompactStr::from(r.as_str())),
-        Expression::NumericLiteral(literal) => Some(CompactStr::from(literal.value.to_string())),
-        Expression::BigIntLiteral(literal) => Some(CompactStr::from(literal.value.as_str())),
+        Expression::StringLiteral(literal) => Some(Cow::Borrowed(literal.value.as_str())),
+        Expression::RegExpLiteral(literal) => literal.raw.map(|r| Cow::Borrowed(r.as_str())),
+        Expression::NumericLiteral(literal) => Some(Cow::Owned(literal.value.to_string())),
+        Expression::BigIntLiteral(literal) => Some(Cow::Borrowed(literal.value.as_str())),
         Expression::BooleanLiteral(literal) => {
-            Some(CompactStr::from(if literal.value { "true" } else { "false" }))
+            Some(Cow::Borrowed(if literal.value { "true" } else { "false" }))
         }
-        Expression::NullLiteral(_) => Some(CompactStr::from("null")),
+        Expression::NullLiteral(_) => Some(Cow::Borrowed("null")),
         Expression::TemplateLiteral(literal) if literal.quasis.len() == 1 => {
-            literal.quasis[0].value.cooked.map(|cooked| CompactStr::from(cooked.as_str()))
+            literal.quasis[0].value.cooked.map(|cooked| Cow::Borrowed(cooked.as_str()))
         }
         _ => None,
     }
 }
 
-fn property_key_name_and_span(key: &PropertyKey<'_>) -> Option<(CompactStr, Span)> {
+fn property_key_name_and_span<'a>(key: &'a PropertyKey<'a>) -> Option<(Cow<'a, str>, Span)> {
     match key {
-        PropertyKey::Identifier(ident) => Some((CompactStr::from(ident.name.as_str()), ident.span)),
+        PropertyKey::Identifier(ident) => Some((Cow::Borrowed(ident.name.as_str()), ident.span)),
         PropertyKey::StaticIdentifier(ident) => {
-            Some((CompactStr::from(ident.name.as_str()), ident.span))
+            Some((Cow::Borrowed(ident.name.as_str()), ident.span))
         }
         PropertyKey::PrivateIdentifier(ident) => {
-            Some((CompactStr::from(ident.name.as_str()), ident.span))
+            Some((Cow::Borrowed(ident.name.as_str()), ident.span))
         }
         match_expression!(PropertyKey) => {
             expression_property_name(key.to_expression()).map(|name| (name, key.span()))
@@ -729,6 +721,13 @@ fn test() {
 #[test]
 fn invalid_configs_error_in_from_configuration() {
     assert!(NoRestrictedProperties::from_configuration(serde_json::json!([{}])).is_err());
+    assert!(
+        NoRestrictedProperties::from_configuration(
+            serde_json::json!({ "object": "foo", "property": "bar" })
+        )
+        .is_err()
+    );
+    assert!(NoRestrictedProperties::from_configuration(serde_json::json!("foo")).is_err());
     assert!(
         NoRestrictedProperties::from_configuration(
             serde_json::json!([{ "object": "foo", "allowObjects": ["bar"] }])
