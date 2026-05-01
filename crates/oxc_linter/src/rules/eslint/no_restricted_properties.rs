@@ -6,7 +6,7 @@ use oxc_ast::{
 };
 use oxc_diagnostics::OxcDiagnostic;
 use oxc_macros::declare_oxc_lint;
-use oxc_span::Span;
+use oxc_span::{GetSpan, Span};
 use oxc_str::CompactStr;
 use schemars::JsonSchema;
 use serde::{Deserialize, de};
@@ -313,7 +313,12 @@ impl Rule for NoRestrictedProperties {
                 let object_name =
                     expression.object.get_identifier_reference().map(|ident| ident.name.as_str());
                 let property_name = expression.property.name.as_str();
-                self.check_property_access(object_name, Some(property_name), expression.span, ctx);
+                self.check_property_access(
+                    object_name,
+                    Some(property_name),
+                    expression.property.span,
+                    ctx,
+                );
             }
             AstKind::ComputedMemberExpression(expression) => {
                 let object_name =
@@ -322,7 +327,7 @@ impl Rule for NoRestrictedProperties {
                 self.check_property_access(
                     object_name,
                     property_name.as_deref(),
-                    expression.span,
+                    expression.expression.span(),
                     ctx,
                 );
             }
