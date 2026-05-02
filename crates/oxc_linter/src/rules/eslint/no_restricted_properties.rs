@@ -119,7 +119,7 @@ impl PropertyDetails {
 #[derive(Debug, Default, Clone, JsonSchema, Deserialize)]
 #[serde(rename_all = "camelCase", default, deny_unknown_fields)]
 pub struct NoRestrictedProperties {
-    restricted_properties: PropertyDetailsList,
+    restricted_properties: Box<PropertyDetailsList>,
 }
 
 declare_oxc_lint!(
@@ -234,7 +234,7 @@ impl Rule for NoRestrictedProperties {
                 )));
             }
         }
-        Ok(Self { restricted_properties: PropertyDetailsList(properties) })
+        Ok(Self { restricted_properties: Box::new(PropertyDetailsList(properties)) })
     }
 
     fn run<'a>(&self, node: &AstNode<'a>, ctx: &LintContext<'a>) {
