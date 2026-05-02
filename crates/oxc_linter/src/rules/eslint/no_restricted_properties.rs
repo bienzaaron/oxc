@@ -219,6 +219,7 @@ impl Rule for NoRestrictedProperties {
                     properties.push(details);
                 }
             }
+            Value::Null => {}
             unexpected => {
                 return Err(de::Error::custom(format!(
                     "expected array of restricted properties but got {unexpected}"
@@ -732,6 +733,7 @@ fn test() {
 
 #[test]
 fn invalid_configs_error_in_from_configuration() {
+    assert!(NoRestrictedProperties::from_configuration(serde_json::Value::Null).is_ok());
     assert!(NoRestrictedProperties::from_configuration(serde_json::json!([{}])).is_err());
     let object_error = NoRestrictedProperties::from_configuration(
         serde_json::json!({ "object": "foo", "property": "bar" }),
