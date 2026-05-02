@@ -343,3 +343,9 @@ source: crates/oxc_linter/src/tester.rs
  1 │ someObject.disallowedProperty; anotherObject.anotherDisallowedProperty()
    ·                                ─────────────
    ╰────
+
+  ⚠ eslint(no-restricted-properties): 'legacyApi' is restricted from being used.
+   ╭─[no_restricted_properties.tsx:1:1]
+ 1 │ legacyApi[method]
+   · ─────────
+   ╰────

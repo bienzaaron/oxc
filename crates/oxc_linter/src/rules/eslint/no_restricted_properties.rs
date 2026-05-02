@@ -96,8 +96,16 @@ impl PropertyDetails {
             return Err(de::Error::custom("expected either `object` or `property`"));
         }
 
+        if self.allow_objects.is_some() && self.property.is_none() {
+            return Err(de::Error::custom("`allowObjects` requires `property`"));
+        }
+
         if self.object.is_some() && self.allow_objects.is_some() {
             return Err(de::Error::custom("`allowObjects` cannot be used with `object`"));
+        }
+
+        if self.allow_properties.is_some() && self.object.is_none() {
+            return Err(de::Error::custom("`allowProperties` requires `object`"));
         }
 
         if self.property.is_some() && self.allow_properties.is_some() {
@@ -111,7 +119,7 @@ impl PropertyDetails {
 #[derive(Debug, Default, Clone, JsonSchema, Deserialize)]
 #[serde(rename_all = "camelCase", default, deny_unknown_fields)]
 pub struct NoRestrictedProperties {
-    restricted_properties: Box<PropertyDetailsList>,
+    restricted_properties: PropertyDetailsList,
 }
 
 declare_oxc_lint!(
@@ -204,7 +212,7 @@ declare_oxc_lint!(
     eslint,
     restriction,
     none,
-    config = NoRestrictedProperties,
+    config = PropertyDetailsList,
     version = "next",
 );
 
@@ -226,7 +234,7 @@ impl Rule for NoRestrictedProperties {
                 )));
             }
         }
-        Ok(Self { restricted_properties: Box::new(PropertyDetailsList(properties)) })
+        Ok(Self { restricted_properties: PropertyDetailsList(properties) })
     }
 
     fn run<'a>(&self, node: &AstNode<'a>, ctx: &LintContext<'a>) {
@@ -347,7 +355,8 @@ impl NoRestrictedProperties {
                 property.object.as_deref().is_none_or(|name| object_name == Some(name));
             let property_matches = match property.property.as_deref() {
                 Some(name) => Some(name) == property_name,
-                None => property_name.is_some(),
+                None if property.allow_properties.is_some() => property_name.is_some(),
+                None => true,
             };
             let object_allowed = property.allow_objects.as_deref().is_some_and(|allow| {
                 object_name
@@ -725,6 +734,7 @@ fn test() {
                 serde_json::json!([ { "object": "someObject", "allowProperties": ["anotherDisallowedProperty"], }, { "object": "anotherObject", "allowProperties": ["disallowedProperty"], }, ]),
             ),
         ),
+        ("legacyApi[method]", Some(serde_json::json!([ { "object": "legacyApi", }, ]))),
     ];
 
     Tester::new(NoRestrictedProperties::NAME, NoRestrictedProperties::PLUGIN, pass, fail)
@@ -751,7 +761,19 @@ fn invalid_configs_error_in_from_configuration() {
     );
     assert!(
         NoRestrictedProperties::from_configuration(
+            serde_json::json!([{ "allowObjects": ["bar"] }])
+        )
+        .is_err()
+    );
+    assert!(
+        NoRestrictedProperties::from_configuration(
             serde_json::json!([{ "property": "foo", "allowProperties": ["bar"] }])
+        )
+        .is_err()
+    );
+    assert!(
+        NoRestrictedProperties::from_configuration(
+            serde_json::json!([{ "allowProperties": ["bar"] }])
         )
         .is_err()
     );
